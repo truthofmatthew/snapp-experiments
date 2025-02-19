@@ -1,4 +1,9 @@
-# CAPTCHA Recognition and Snapp Authentication Automation
+
+
+
+## CAPTCHA Recognition and Snapp Authentication Automation | MeOwwwww 🤙
+
+![Predictions Plot](predictions_plot.png)
 
 ## Introduction
 
@@ -198,6 +203,9 @@ To validate the model's performance on **unseen** CAPTCHAs from Snapp, an automa
    - `snapp_going_inside.py` was used to test the full authentication pipeline.
    - The script successfully extracted CAPTCHA images, predicted text, and submitted the solution.
    - Validation confirmed that the model maintained high accuracy when integrated into real-world API interactions.
+
+![Screenshot 2025-02-19 at 13.12.54](Screenshot%202025-02-19%20at%2013.12.54.png)
+
 
 ## Ethical Considerations
 
