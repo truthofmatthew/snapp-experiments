@@ -1,0 +1,13 @@
+torch
+torchvision
+torchaudio
+numpy
+matplotlib
+pandas
+scikit-learn
+tqdm
+Pillow
+requests
+json5
+svgwrite
+tensorboard
