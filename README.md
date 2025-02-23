@@ -1,213 +1,237 @@
-
-
-
-## CAPTCHA Recognition and Snapp Authentication Automation | MeOwwwww 🤙
-
-![Predictions Plot](predictions_plot.png)
-
-## Introduction
-
-While exploring the Snapp website, I set out to determine whether it was possible to log in without using a web browser or the official mobile app. My approach involved inspecting the site's API calls during the login process to identify usable endpoints.
-
-## API Discovery and Analysis
-
-By analyzing network requests, I identified key endpoints used for authentication:
-
-- **Base API URL:** `https://app.snapp.taxi/api`
-- **Login Endpoint:** `https://app.snapp.taxi/login`
-- **OTP Request Endpoint:** `https://app.snapp.taxi/api-passenger-oauth/v3/mutotp`
-- **Captcha Generation Endpoint:** `https://app.snapp.taxi/captcha/api/v1/generate/text/numeric/71C84A80-395B-448E-A240-B7DC939186D3`
-
-Each endpoint serves a unique purpose, such as handling authentication, issuing login tokens, or generating CAPTCHAs.
-
-### Security Observations
-
-I found a minor security issue: calling the CAPTCHA endpoint directly always returns a fresh CAPTCHA. Additionally, switching `numeric` to `alphabetic` in the URL generates a different CAPTCHA:
-
-```
-https://app.snapp.taxi/api/captcha/api/v1/generate/text/alphabetic/71C84A80-395B-448E-A240-B7DC939186D3
-```
-
-Upon requesting a CAPTCHA, the response includes a `ref_id`, which must be provided in subsequent login attempts:
-
-```json
-{
-  "captcha": {
-    "client_id": "71C84A80-395B-448E-A240-B7DC939186D3",
-    "solution": pred_text,
-    "ref_id": captcha_data["ref_id"],
-    "type": "numeric"
-  }
-}
-```
-
-Interestingly, Snapp uses `svg-captcha`, a free, open-source CAPTCHA generator, without modifying its font or complexity. This is not a major issue because the critical security measure is the SMS token, which has rate limitations.
-
-## CAPTCHA Recognition Model
-
-To automate CAPTCHA solving, I generated a dataset of 10 synthetic CAPTCHA images similar to Snapp's and trained a **Convolutional Recurrent Neural Network (CRNN)** using PyTorch.
-
-### Model Performance
-
-- **Accuracy:** 0.998
-- **Confidence after 5 epochs:** 0.9776
-- **Confidence after 10 epochs:** 0.9981
-- **Model sizes:**
-  - Full model (`model.pth`): 175MB
-  - Compressed model (`model_half.pth`): 30MB (still achieving 0.9711 confidence)
-
-### Confusion Matrices
-
 <table>
   <tr>
-    <td><img src="./checkpoints/epoch_cm_01.png" alt="Confusion Matrix 1" width="150"></td>
-    <td><img src="./checkpoints/epoch_cm_01.png" alt="Confusion Matrix 2" width="150"></td>
-    <td><img src="./checkpoints/epoch_cm_01.png" alt="Confusion Matrix 10" width="150"></td>
-  </tr>
-  <tr>
-    <td>Epoch: 1</td>
-    <td>Epoch: 2</td>
-    <td>Epoch: 10</td>
+    <td width="50%" valign="top">
+      <h3>🚨 Snapp CAPTCHA Security Flaws</h3>
+      <div align="center">
+        <img src="predictions_plot.png" alt="Predictions Plot"  >
+      </div>
+    </td>
+    <td width="50%" valign="top">
+      <h3>Introduction</h3>
+      <p>While exploring the Snapp website, I investigated whether it was possible to log in without using a web browser or the official mobile app. My approach involved inspecting network requests to reverse-engineer authentication.</p>
+      <p>During this process, I discovered a <b>security flaw</b> in Snapp's CAPTCHA implementation, allowing unrestricted automated requests. This Gist covers:</p>
+      <ul>
+        <li><b>Security flaws in Snapp's CAPTCHA</b></li>
+        <li><b>Automating CAPTCHA solving using deep learning</b></li>
+        <li><b>Solutions to improve CAPTCHA security</b></li>
+      </ul>
+    </td>
   </tr>
 </table>
 
 
 
+---
 
-The improvement in confusion matrices across epochs demonstrates the model's learning progression and reduced misclassification.
+## 🔎 API Discovery and Analysis  
 
-## Automating Snapp Authentication
+By inspecting network traffic, I identified Snapp's key authentication endpoints:
 
-### Fetching CAPTCHA
+- **Base API URL:** `https://app.snapp.taxi/api`
+- **Login Endpoint:** `https://app.snapp.taxi/login`
+- **OTP Request Endpoint:** `https://app.snapp.taxi/api-passenger-oauth/v3/mutotp`
+- **CAPTCHA Generation Endpoint:**  
+  ```
+  https://app.snapp.taxi/api/captcha/api/v1/generate/text/numeric/71C84A80-395B-448E-A240-B7DC939186D3
+  ```
 
+#### 🔹 Fetching CAPTCHA using `curl`
+To retrieve and save the CAPTCHA directly using `curl`, run:
 ```bash
-python snapp_captcha_getter.py
+curl -s "https://app.snapp.taxi/api/captcha/api/v1/generate/text/numeric/71C84A80-395B-448E-A240-B7DC939186D3" | \
+jq -r '.image' | cut -d ',' -f2 | base64 --decode > captcha.jpg
 ```
 
-- Calls Snapp's CAPTCHA API
-- Saves the CAPTCHA image
-- Predicts the CAPTCHA solution using the trained model
+### 🛑 **Security Issue: Unrestricted CAPTCHA Generation**  
+Each API request to the CAPTCHA endpoint **always returns a new CAPTCHA** without any session validation.  
+- There is **no rate-limiting** or **session tracking**.  
+- Attackers can **request unlimited CAPTCHAs** and use OCR to automate solving.  
 
-### Completing Login
-
-```bash
-python snapp_going_inside.py
+Additionally, changing the URL parameter `numeric` to `alphabetic` generates different CAPTCHA types:
+```
+https://app.snapp.taxi/api/captcha/api/v1/generate/text/alphabetic/71C84A80-395B-448E-A240-B7DC939186D3
 ```
 
-- Submits a login request
-- Uses the CAPTCHA prediction for authentication
-- Automates the entire login process
+### 📌 Example of CAPTCHA API Request in Snapp  
 
-## Educational Value
+```python
+import requests
+import base64
+import os
+import time
 
-This project highlights the importance of understanding web security and automation techniques. By analyzing API requests and leveraging deep learning for CAPTCHA recognition, it demonstrates real-world applications of:
+url = "https://app.snapp.taxi/api/captcha/api/v1/generate/text/numeric/71C84A80-395B-448E-A240-B7DC939186D3"
 
-- **Reverse Engineering Web Authentication**: How web applications authenticate users and where vulnerabilities may exist.
-- **Deep Learning for OCR**: Using CRNNs to solve image-to-text problems effectively.
-- **Automation with Ethical Considerations**: Exploring automation responsibly without violating terms of service.
+headers = {
+    "Authorization": "Bearer your_token_here",
+    "User-Agent": "Mozilla/5.0",
+}
 
-## Disclaimer
+response = requests.get(url, headers=headers)
 
-This project is for educational and research purposes only. Unauthorized automation of protected services may violate terms of use and legal policies. Use responsibly.
+if response.status_code == 200:
+    image_data = response.json().get("image").split(",")[1]
+    image_bytes = base64.b64decode(image_data)
+
+    if not os.path.exists("captcha"):
+        os.makedirs("captcha")
+
+    timestamp = int(time.time())
+    with open(f"captcha/{timestamp}_captcha.jpg", "wb") as f:
+        f.write(image_bytes)
+
+    print(f"CAPTCHA saved: captcha/{timestamp}_captcha.jpg")
+```
+
+📌 **Problem:**  
+- There is **no session restriction** on CAPTCHA generation.  
+- Attackers can **bulk-collect CAPTCHA images** for model training.
+
+---
+
+## 🛠️ How to Improve Snapp's CAPTCHA Security  
+
+### ✅ 1️⃣ Implement Session-Based CAPTCHA  
+
+- Require a **session token** before generating CAPTCHA.
+- Ensure CAPTCHA **expires** after use.
+
+🔧 **How?**  
+- Store CAPTCHA in session storage and prevent multiple requests per session.
+
+```python
+SESSION_CAPTCHAS = {}
+
+def generate_captcha(session_id):
+    if session_id in SESSION_CAPTCHAS:
+        return SESSION_CAPTCHAS[session_id]  # Return existing CAPTCHA
+
+    new_captcha = create_captcha_image()  # Generate new one
+    SESSION_CAPTCHAS[session_id] = new_captcha
+    return new_captcha
+```
+
+---
+
+### ✅ 2️⃣ Enforce Rate Limiting  
+
+- Restrict **CAPTCHA requests per IP**.
+- Implement **progressive cooldowns** for repeated failures.
+
+```python
+from fastapi import FastAPI, Depends, Request, HTTPException
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+app = FastAPI()
+
+# Set up rate limiting
+limiter = Limiter(key_func=get_remote_address)
+
+@app.get("/captcha")
+@limiter.limit("5/minute")
+async def generate_captcha(request: Request):
+    return {"captcha": "generated_image"}
+
+# Add middleware for rate limiting
+from slowapi.middleware import SlowAPIMiddleware
+app.add_middleware(SlowAPIMiddleware)
+
+```
+
+---
+
+### ✅ 3️⃣ Strengthen CAPTCHA Complexity  
+
+- Add **randomized distortions, variable fonts, and noise** to prevent OCR-based attacks.
+
+---
+
+## 🚀 Automating Snapp CAPTCHA Recognition  
+
+To automate solving, I trained a **Convolutional Recurrent Neural Network (CRNN)** using PyTorch.  
+
+### Model Performance  
+
+- **Accuracy:** `0.998`
+- **Confidence after 10 epochs:** `0.9981`
+- **Compressed model size:** `30MB`  
+
+### 📊 Confusion Matrices Across Training Epochs  
+
+<table>
+  <tr>
+    <td><img src="./checkpoints/epoch_cm_01.png" width="150"></td>
+    <td><img src="./checkpoints/epoch_cm_05.png" width="150"></td>
+    <td><img src="./checkpoints/epoch_cm_10.png" width="150"></td>
+  </tr>
+  <tr>
+    <td>Epoch 1</td>
+    <td>Epoch 5</td>
+    <td>Epoch 10</td>
+  </tr>
+</table>
+
+---
+
+## 🏗️ CAPTCHA Recognition Pipeline  
+
+| Step | Description | Command |
+|------|------------|---------|
+| 🏷 **Fetching CAPTCHA** | Calls Snapp’s CAPTCHA API, saves the image, and runs OCR model for prediction. | ```bash python snapp_captcha_getter.py ``` |
+| 🔐 **Automating Login** | Submits a login request, uses CAPTCHA prediction for authentication, and automates the login process. | ```bash python snapp_going_inside.py ``` |
 
 
-## Dataset Generation
 
-To ensure high-quality training data, the dataset was generated through a customized version of `svg-captcha`. The dataset creation process included:
+---
 
-1. **Customizing `svg-captcha`**: The core library was cloned and modified to generate darker-colored CAPTCHAs for improved contrast and legibility.
-2. **Ensuring Numeric Balance**:
-   - A script was developed to generate CAPTCHAs while ensuring each digit (0-9) appears at least **2000 times**.
-   - Captchas were stored as **JPEG images** with their labels saved in corresponding JSON files.
-3. **Final Dataset Balancing**:
-   - An additional Python script was created to verify and balance the dataset.
-   - This script adjusted the dataset by **removing excess occurrences** of overrepresented digits, ensuring a uniform distribution.
+## 🧠 **Deep Learning Model Architecture (CRNN)**  
 
-### Image Specifications
+### **1️⃣ Convolutional Feature Extraction**  
+- **5 Convolutional Layers** (3x3 kernels, ReLU activations).  
+- **Batch Normalization & MaxPooling** for better generalization.  
+- **Dropout** to prevent overfitting.  
 
-- **Characters**: 5-digit numeric CAPTCHAs
-- **Height**: 50px
-- **Width**: 150px
-- **Color Mode**: Grayscale with darkened characters
-- **Noise & Distortion**: Controlled noise addition for realism
+### **2️⃣ Recurrent Sequence Processing**  
+- **BiLSTM** (Bidirectional Long Short-Term Memory) for sequence prediction.  
+- **Linear Layer Projection** to character logits.  
+- **Log Softmax Activation** for probability distributions.  
 
-## Model Architecture
+### **3️⃣ CTC Loss for Sequence Learning**  
+- Eliminates the need for predefined segmentation.  
 
-The model follows a **CRNN** (Convolutional Recurrent Neural Network) architecture that integrates feature extraction and sequence modeling, making it highly effective for CAPTCHA recognition. It consists of the following key components:
+```python
+import torch.nn as nn
 
-### 1. Convolutional Feature Extraction
+class CRNN(nn.Module):
+    def __init__(self):
+        super(CRNN, self).__init__()
+        self.cnn = nn.Sequential(
+            nn.Conv2d(1, 64, 3, padding=1), nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(64, 128, 3, padding=1), nn.ReLU(),
+        )
+        self.rnn = nn.LSTM(128, 256, bidirectional=True, batch_first=True)
+        self.fc = nn.Linear(512, 10)  # Output: 10 digits
 
-- **5 Convolutional Layers**:
-  - Uses **3x3 kernels** to capture fine-grained spatial features.
-  - **ReLU activations** for non-linearity and efficient training.
-- **Batch Normalization**:
-  - Stabilizes training and prevents internal covariate shift.
-- **MaxPooling Layers**:
-  - Reduces spatial dimensions while retaining essential patterns.
-  - Two of the pooling layers use asymmetric pooling `(2,1)` to preserve width dimensions.
-- **Dropout Layers**:
-  - Applied after each convolutional block to reduce overfitting.
+    def forward(self, x):
+        x = self.cnn(x)
+        x, _ = self.rnn(x)
+        return self.fc(x)
+```
 
-### 2. Recurrent Sequence Processing
+---
 
-- **Two-layer BiLSTM (Bidirectional Long Short-Term Memory)**:
-  - Captures contextual dependencies in both forward and backward directions.
-  - Improves accuracy in sequential data processing.
-- **Linear Layer Projection**:
-  - Maps the BiLSTM output to character logits.
-- **Log Softmax Activation**:
-  - Converts raw predictions into probability distributions for decoding.
+## ⚠️ Ethical Considerations  
 
-### 3. Loss Function: Connectionist Temporal Classification (CTC)
+This project was conducted **for research purposes only**. Unauthorized CAPTCHA bypassing **may violate legal policies and terms of service**. **Use responsibly.**  
 
-- **Why CTC?**
-  - CAPTCHAs have variable-length character sequences.
-  - No explicit alignment between input images and labels.
-  - CTC loss enables sequence learning without predefined character segmentation.
-- **CTC Greedy Decoding**
-  - Eliminates repeated characters and blank labels to extract the final prediction.
+### 🔥 **Summary**  
 
-## Training Details
+✅ Snapp CAPTCHA is vulnerable to **automation attacks**.  
+✅ By implementing **session-based validation, rate limiting, and stronger CAPTCHAs**, Snapp can **enhance security**.  
+✅ Deep learning-based OCR **can easily break static CAPTCHAs**.  
 
-- **Optimizer**: AdamW with weight decay of `1e-5`.
-- **Learning Rate Scheduler**: Reduces LR when validation loss plateaus.
-- **Batch Size**: 16 (adjusted for optimal GPU usage).
-- **Epochs**: 10 (achieves near-optimal accuracy by epoch 5).
-- **Gradient Scaling**: Uses mixed-precision training to prevent gradient underflow.
-- **Efficient Checkpointing**: Saves model weights and optimizer states for resuming training.
-- **Dynamic Input Lengths**: CTC loss allows prediction of varying-length sequences without explicit labels.
+---
 
-## Inference Pipeline
-
-A trained model is used for inference with the following steps:
-
-1. Load the latest trained checkpoint.
-2. Preprocess input image (grayscale, resizing, tensor conversion).
-3. Forward pass through the CRNN.
-4. Decode predictions using CTC Greedy Decoding.
-5. Output predicted CAPTCHA text.
-
-## Testing and Real-World Evaluation
-
-To validate the model's performance on **unseen** CAPTCHAs from Snapp, an automated evaluation pipeline was implemented:
-
-1. **Real CAPTCHA Collection**:
-   - `snapp_captcha_getter.py` was used to request CAPTCHAs directly from Snapp's API.
-   - Captchas were retrieved in base64 format and converted into images.
-   - Each CAPTCHA and its API response were logged for further analysis.
-2. **Inference on Unseen CAPTCHAs**:
-   - The model was tested on these fresh CAPTCHAs to verify generalization.
-   - Predictions were compared against ground truth values.
-   - Confidence scores and failure cases were analyzed to refine model robustness.
-3. **Automated Login Testing**:
-   - `snapp_going_inside.py` was used to test the full authentication pipeline.
-   - The script successfully extracted CAPTCHA images, predicted text, and submitted the solution.
-   - Validation confirmed that the model maintained high accuracy when integrated into real-world API interactions.
-
-![Screenshot 2025-02-19 at 13.12.54](Screenshot%202025-02-19%20at%2013.12.54.png)
-
-
-## Ethical Considerations
-
-This research aims to enhance OCR and machine learning knowledge. CAPTCHA bypassing should be used ethically, ensuring it does not violate service agreements or legal guidelines.
-
+#CyberSecurity #Snapp #MachineLearning #Automation  
