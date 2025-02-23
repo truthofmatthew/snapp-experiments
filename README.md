@@ -37,10 +37,7 @@ By inspecting network traffic, I identified Snapp's key authentication endpoints
 
 #### 🔹 Fetching CAPTCHA using `curl`
 To retrieve and save the CAPTCHA directly using `curl`, run:
-```bash
-curl -s "https://app.snapp.taxi/api/captcha/api/v1/generate/text/numeric/71C84A80-395B-448E-A240-B7DC939186D3" | \
-jq -r '.image' | cut -d ',' -f2 | base64 --decode > captcha.jpg
-```
+![why?](curl_shot.png)
 
 ### 🛑 **Security Issue: Unrestricted CAPTCHA Generation**  
 Each API request to the CAPTCHA endpoint **always returns a new CAPTCHA** without any session validation.  
@@ -161,9 +158,9 @@ To automate solving, I trained a **Convolutional Recurrent Neural Network (CRNN)
 
 <table>
   <tr>
-    <td><img src="./checkpoints/epoch_cm_01.png" width="150"></td>
-    <td><img src="./checkpoints/epoch_cm_05.png" width="150"></td>
-    <td><img src="./checkpoints/epoch_cm_10.png" width="150"></td>
+    <td><img src="./checkpoints/epoch_cm_01.png" ></td>
+    <td><img src="./checkpoints/epoch_cm_05.png" ></td>
+    <td><img src="./checkpoints/epoch_cm_10.png" ></td>
   </tr>
   <tr>
     <td>Epoch 1</td>
